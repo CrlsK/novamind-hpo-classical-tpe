@@ -17,6 +17,7 @@ import json
 import time
 import math
 import random
+import os
 from typing import Dict, Any, List, Tuple, Optional
 from datetime import datetime
 import hashlib
@@ -409,196 +410,106 @@ class ClassicalTPESolver:
         cost_breakdown = self._compute_cost_breakdown(elapsed_time)
 
         # Compute benchmark
-        benchmark = self._compute_benchmark(elapsed_time, cost_breakdown)
+        bench\mark = self._compute_bench^ark(elapsed_time, cost_breakdown)
+
+        # Generate visualizations before returning
+        self._generate_visualizations(results)
 
         return {
+
             'objective_value': best_value,
             'best_params': best_params,
-            'best_trial_number': best_trial.number,
-            'solution_status': status,
-            'computation_metrics': metrics,
-            'cost_breakdown': cost_breakdown,
-            'benchmark': benchmark,
-            'top_10_configurations': top_configs,
-            'total_trials': len(self.study.trials),
-            'trial_history': self.surrogate.trial_history,
         }
+(running_best)) * 0.95
+        max_val = max(max(scores), max(running_best)) * 1.05
+        val_range = max_val - min_val if max_val > min_val else 1
 
-    def _compute_metrics(self, scores: List[float], elapsed: float) -> Dict[str, float]:
-        """Compute optimization metrics."""
-        if not scores:
-            return {
-                'mean_score': 0.0,
-                'max_score': 0.0,
-                'min_score': 0.0,
-                'std_dev': 0.0,
-                'convergence_rate': 0.0,
-                'time_per_trial': 0.0,
-                'total_time_seconds': elapsed,
-            }
+        min_trial = min(trial_nums)
+        max_trial = max(trial_nums)
+        trial_range = max_trial - min_trial if max_trial > min_trial else 1
 
-        # Sort scores to track convergence
-        sorted_scores = sorted(scores)
+        # Generate SVG
+        svg_lines = ['<svg width="800" height="400" xmlns="http://www.w3.org/2000/svg">']
+        svg_lines.append('<style>')
+        svg_lines.append('  .grid { stroke: #e5e7eb; stroke-width: 1; }')
+        svg_lines.append('  .axis { stroke: #374151; stroke-width: 2; }')
+        svg_lines.append('  .axis-label { font-size: 12px; fill: #374151; }')
+        svg_lines.append('  .title { font-size: 16px; font-weight: bold; fill: #1f2937; }')
+        svg_lines.append('</style>')
 
-        # Compute convergence rate (improvement from first 20% to last 20% of trials)
-        n = len(sorted_scores)
-        first_batch_mean = sum(sorted_scores[:max(1, n//5)]) / max(1, n//5)
-        last_batch_mean = sum(sorted_scores[-max(1, n//5):]) / max(1, n//5)
-        convergence_rate = max(0.0, last_batch_mean - first_batch_mean)
+        # Grid lines and axes
+        svg_lines.append(f'<line x1="{margin}" y1="{height - margin}" x2="{width - margin}" y2="{height - margin}" class="axis"/>')
+        svg_lines.append(f'<line x1="{margin}" y1="{margin}" x2="{margin}" y2="{height - margin}" class="axis"/>')
 
-        return {
-            'mean_score': sum(scores) / len(scores),
-            'max_score': max(scores),
-            'min_score': min(scores),
-            'std_dev': (sum((x - sum(scores) / len(scores)) ** 2 for x in scores) / len(scores)) ** 0.5,
-            'convergence_rate': convergence_rate,
-            'time_per_trial': elapsed / len(scores),
-            'total_time_seconds': elapsed,
-        }
+        # Grid
+        for i in range(5):
+            y = margin + (i * plot_height / 4)
+            svg_lines.append(f'<line x1="{margin}" y1="{y}" x2="{width - margin}" y2="{y}" class="grid"/>')
 
-    def _compute_cost_breakdown(self, elapsed: float) -> Dict[str, Any]:
-        """Compute cost breakdown."""
-        # Simulate cost allocation
-        # Assumption: each trial takes ~3.6 minutes (200 trials * 3.6min = 12 GPU-hours)
-        time_per_trial_minutes = 3.6
-        total_gpu_hours = (self.n_trials * time_per_trial_minutes) / 60.0
+        # Axis labels
+        for i in range(5):
+            val = min_val + (i * val_range / 4)
+            y = height - margin - (i * plot_height / 4)
+            svg_lines.append(f'<text x="{margin - 45}" y="{y + 4}" class="axis-label">{val:.3f}</text>')
 
-        cost_per_gpu_hour = 48.0 / 12.0  # $4 per GPU-hour
-        total_cost = total_gpu_hours * cost_per_gpu_hour
+        for i in range(5):
+            trial = min_trial + int(i * trial_range / 4)
+            x = margin + (i * plot_width / 4)
+            svg_lines.append(f'<text x="{x}" y="{height - margin + 20}" class="axis-label">{trial}</text>')
 
-        return {
-            'total_gpu_hours': total_gpu_hours,
-            'cost_per_gpu_hour': cost_per_gpu_hour,
-            'total_cost_usd': total_cost,
-            'cost_per_trial': total_cost / self.n_trials,
-            'wall_clock_time_seconds': elapsed,
-        }
+       # Plot trial scores (light blue)
+        for i, (trial, score) in enumerate(zip(trial_nums, scores)):
+            x = margin + ((trial - min_trial) / trial_range * plot_width) if trial_range > 0 else margin
+            y = height - margin - ((score - min_val) / val_range * plot_height) if val_range > 0 else height - margin
+            svg_lines.append(f'<circle cx="{x}" cy="{y}" r="3" fill="#93c5fd" opacity="0.6"/>')
 
-    def _compute_benchmark(self, elapsed: float, cost_breakdown: Dict[str, Any]) -> Dict[str, Any]:
-        """Compute benchmark metrics."""
-        # Energy consumption estimate (GPU power ~ 250W average)
-        gpu_power_watts = 250.0
-        energy_joules = (elapsed / 3600.0) * gpu_power_watts * 3600.0
-        energy_kwh = energy_joules / 3.6e6
+        # Plot running best line (blue)
+        best_points = []
+        for i, (trial, best) in enumerate(zip(trial_nums, running_best)):
+            x = margin + ((trial - min_trial) / trial_range * plot_width) if trial_range > 0 else margin
+            y = height - margin - ((best - min_val) / val_range * plot_height) if val_range > 0 else height - margin
+            best_points.append((x, y))
 
-        return {
-            'execution_cost': cost_breakdown['total_cost_usd'],
-            'time_elapsed': elapsed,
-            'energy_consumption_kwh': energy_kwh,
-            'trials_completed': self.n_trials,
-            'efficiency_metric': (self.study.best_trial.value * 100) / elapsed,  # score per second
-        }
+        if best_points:
+            path_data = ' '.join([f"{'M' if i == 0 else 'L'} { x} {y}" for i, (x, y) in enumerate(best_points)])
+            svg_lines.append(f'<path d="{path_data}" stroke="#2563eb" stroke-width="2" fill="none"/>')
 
+        # Labels
+        svg_lines.append(f'<text x="400" y="25" class="title" text-anchor="middle">Optimization Convergence</text>')
+        svg_lines.append(f'<text x="{margin - 45}" y="35" class="axis-label" text-anchor="end">Score</text>')
+        svg_lines.append(f'<text x="{width // 2}" y="{height - 10}" class="axis-label" text-anchor="middle">Trial Number</text>')
 
-def run(input_data: dict, solver_params: dict, extra_arguments: dict) -> dict:
-    """
-    QCentroid solver entry point.
+        # Legend
+        svg_lines.append(f'<circle cx="650" cy="50" r="3" fill="#93c5fd"/>')
+        svg_lines.append(f'<text x="660" y="55" class="axis-label">Trial Score</text>')
+        svg_lines.append(f'<line x1="650" y1="70" x2="670" y2="70" stroke="#2563eb" stroke-width="2"/>')
+        svg_lines.append(f'<text x="680" y="75" class="axis-label">Running Best</text>')
 
-    This function is called by the QCentroid framework to execute the solver.
+        svg_lines.append('</svg>')
 
-    Args:
-        input_data: Complete HPO problem specification including search space,
-                   constraints, evaluation protocol, solver config, etc.
-        solver_params: Solver-specific parameter overrides
-        extra_arguments: Additional arguments from the caller
+        html_content = f'''<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Optimization Convergence</title>
+    <style>
+        body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f9fafb; margin: 0; padding: 20px; }}
+        .container {{ max-width: 1000px; margin: 0 auto; }}
+        h1 {{ color: #1f2937; margin-bottom: 20px; }}
+        .chart-container {{ background: white; border-radius: 8px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }}
+        svg {{ display: block; margin: 0 auto; }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Optimization Convergence</h1>
+        <div class="chart-container">
+            {"".join(svg_lines)}
+        </div>
+    </div>
+</body>
+</html>'''
 
-    Returns:
-        Dictionary with optimization results including objective value, solution status,
-        computation metrics, cost breakdown, and benchmark information.
-    """
-    logger.info("=" * 80)
-    logger.info("Classical TPE/Optuna Hyperparameter Optimization Solver")
-    logger.info("=" * 80)
-    logger.info(f"Input data keys: {list(input_data.keys())}")
-    logger.info(f"Solver params: {solver_params}")
-    logger.info(f"Extra arguments: {extra_arguments}")
-
-    try:
-        # Initialize and run solver
-        solver = ClassicalTPESolver(input_data, solver_params)
-        results = solver.run()
-
-        logger.info("=" * 80)
-        logger.info("OPTIMIZATION RESULTS")
-        logger.info("=" * 80)
-        logger.info(f"Best value: {results['objective_value']:.4f}")
-        logger.info(f"Status: {results['solution_status']}")
-        logger.info(f"Total trials: {results['total_trials']}")
-        logger.info(f"Time elapsed: {results['benchmark']['time_elapsed']:.2f}s")
-        logger.info(f"Cost: ${results['benchmark']['execution_cost']:.2f}")
-        logger.info("=" * 80)
-
-        return results
-
-    except Exception as e:
-        logger.exception(f"Solver execution failed: {e}")
-        return {
-            'objective_value': 0.0,
-            'best_params': {},
-            'solution_status': 'ERROR',
-            'error_message': str(e),
-            'computation_metrics': {},
-            'cost_breakdown': {},
-            'benchmark': {
-                'execution_cost': 0.0,
-                'time_elapsed': 0.0,
-                'energy_consumption_kwh': 0.0,
-            },
-        }
-
-
-if __name__ == '__main__':
-    # Local testing
-    logger.info("Running ClassicalTPESolver in local mode")
-
-    # Create minimal test input_data
-    test_input_data = {
-        'Search space definition': {
-            'learning_rate': {'type': 'float', 'low': 1e-5, 'high': 1e-3, 'log': True},
-            'warmup_steps': {'type': 'int', 'low': 100, 'high': 2000},
-            'weight_decay': {'type': 'float', 'low': 0.0, 'high': 0.5},
-            'dropout_rate': {'type': 'float', 'low': 0.1, 'high': 0.5},
-            'attention_heads': {'type': 'int', 'low': 8, 'high': 16},
-            'hidden_dim': {'type': 'categorical', 'choices': [512, 768, 1024]},
-            'num_layers': {'type': 'int', 'low': 6, 'high': 24},
-            'batch_size': {'type': 'categorical', 'choices': [16, 32, 64]},
-            'optimizer': {'type': 'categorical', 'choices': ['adam', 'adamw', 'sgd']},
-            'scheduler': {'type': 'categorical', 'choices': ['linear', 'cosine', 'step']},
-            'gradient_clipping': {'type': 'float', 'low': 1.0, 'high': 10.0},
-            'label_smoothing': {'type': 'float', 'low': 0.0, 'high': 0.2},
-            'mixed_precision': {'type': 'categorical', 'choices': [False, True]},
-            'activation_function': {'type': 'categorical', 'choices': ['relu', 'gelu', 'silu']},
-            'positional_encoding': {'type': 'categorical', 'choices': ['absolute', 'rotary', 'alibi']},
-            'layer_norm_type': {'type': 'categorical', 'choices': ['layernorm', 'rmsnorm', 'groupnorm']},
-        },
-        'Objective metric': 'f1_macro',
-        'Optimization direction': 'maximize',
-        'Solver configuration': {
-            'classical_baseline': {
-                'n_trials': 50,
-                'n_startup_trials': 20,
-                'multivariate': True,
-                'group': True,
-                'constant_liar': True,
-            }
-        }
-    }
-
-    test_solver_params = {
-        'n_trials': 50,
-        'seed': 42,
-    }
-
-    results = run(test_input_data, test_solver_params, {})
-
-    print("\n" + "=" * 80)
-    print("FINAL RESULTS")
-    print("=" * 80)
-    print(json.dumps({k: v for k, v in results.items()
-                     if k not in ['trial_history', 'top_10_configurations']},
-                    indent=2, default=str))
-    print(f"\nBest objective value: {results['objective_value']:.4f}")
-    print(f"Top 10 configurations (first 3):")
-    for config in results['top_10_configurations'][:3]:
-        print(f"  Rank {config['rank']}: {config['score']:.4f}")
-
+        with open('additional_output/convergence_plot.html', 'w') as f:
+            f.write(html_content)
