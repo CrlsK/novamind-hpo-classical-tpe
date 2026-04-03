@@ -1,5 +1,4 @@
-"""
-Classical TPE/Optuna Hyperparameter Optimization Solver for QCentroid
+"""Classical TPE/Optuna Hyperparameter Optimization Solver for QCentroid
 ======================================================================
 This solver implements a production-grade Tree-structured Parzen Estimator (TPE)
 based hyperparameter optimization baseline using Optuna, configured for the
@@ -26,6 +25,12 @@ import optuna
 from optuna.samplers import TPESampler
 from optuna.pruners import MedianPruner
 from optuna.trial import Trial
+
+# Try to import visualization module
+try:
+    from visualizations import generate_classical_visualizations
+except ImportError:
+    generate_classical_visualizations = None
 
 # Configure logging
 logging.basicConfig(
@@ -427,700 +432,189 @@ class ClassicalTPESolver:
 
         return results
 
-    def _generate_visualizations(self, results: Dict[str, Any]) -> None:
-        """
-        Generate visualization HTML files in the additional_output folder.
-
-        Creates:
-        - convergence_plot.html: Line chart of trial scores and running best
-        - hyperparameter_importance.html: Bar chart of parameter correlations
-        - score_distribution.html: Histogram of trial scores
-        - top_configurations.html: Table of top 10 configurations
-        - search_summary.html: Dashboard with search space and results summary
-        """
-        try:
-            # Create output directory
-            os.makedirs('additional_output', exist_ok=True)
-
-            # Extract data for visualizations
-            trial_history = self.surrogate.trial_history
-            all_values = [t['score'] for t in trial_history]
-            best_value = results['objective_value']
-            top_configs = results['top_10_configurations']
-
-            # Generate each visualization
-            self._create_convergence_plot(trial_history, all_values)
-            self._create_hyperparameter_importance(trial_history)
-            self._create_score_distribution(all_values, best_value)
-            self._create_top_configurations_table(top_configs)
-            self._create_search_summary(results)
-
-            logger.info("Visualizations generated successfully in additional_output/")
-
-        except Exception as e:
-            logger.warning(f"Failed to generate visualizations: {e}")
-
-    def _create_convergence_plot(self, trial_history: List[Dict], all_values: List[float]) -> None:
-        """Create convergence plot showing trial scores and running best."""
-        if not trial_history:
-            return
-
-        # Calculate running best
-        running_best = []
-        best_so_far = float('-inf')
-        for item in trial_history:
-            best_so_far = max(best_so_far, item['score'])
-            running_best.append(best_so_far)
-
-        trial_nums = [item['trial_num'] for item in trial_history]
-        scores = [item['score'] for item in trial_history]
-
-        # Calculate SVG dimensions and scaling
-        width, height = 800, 400
-        margin = 60
-        plot_width = width - 2 * margin
-        plot_height = height - 2 * margin
-
-        min_val = min(min(scores), min(running_best)) * 0.95
-        max_val = max(max(scores), max(running_best)) * 1.05
-        val_range = max_val - min_val if max_val > min_val else 1
-
-        min_trial = min(trial_nums)
-        max_trial = max(trial_nums)
-        trial_range = max_trial - min_trial if max_trial > min_trial else 1
-
-        # Generate SVG
-        svg_lines = ['<svg width="800" height="400" xmlns="http://www.w3.org/2000/svg">']
-        svg_lines.append('<style>')
-        svg_lines.append('  .grid { stroke: #e5e7eb; stroke-width: 1; }')
-        svg_lines.append('  .axis { stroke: #374151; stroke-width: 2; }')
-        svg_lines.append('  .axis-label { font-size: 12px; fill: #374151; }')
-        svg_lines.append('  .title { font-size: 16px; font-weight: bold; fill: #1f2937; }')
-        svg_lines.append('</style>')
-
-        # Grid lines and axes
-        svg_lines.append(f'<line x1="{margin}" y1="{height - margin}" x2="{width - margin}" y2="{height - margin}" class="axis"/>')
-        svg_lines.append(f'<line x1="{margin}" y1="{margin}" x2="{margin}" y2="{height - margin}" class="axis"/>')
-
-        # Grid
-        for i in range(5):
-            y = margin + (i * plot_height / 4)
-            svg_lines.append(f'<line x1="{margin}" y1="{y}" x2="{width - margin}" y2="{y}" class="grid"/>')
-
-        # Axis labels
-        for i in range(5):
-            val = min_val + (i * val_range / 4)
-            y = height - margin - (i * plot_height / 4)
-            svg_lines.append(f'<text x="{margin - 45}" y="{y + 4}" class="axis-label">{val:.3f}</text>')
-
-        for i in range(5):
-            trial = min_trial + int(i * trial_range / 4)
-            x = margin + (i * plot_width / 4)
-            svg_lines.append(f'<text x="{x}" y="{height - margin + 20}" class="axis-label">{trial}</text>')
-
-        # Plot trial scores (light blue)
-        for i, (trial, score) in enumerate(zip(trial_nums, scores)):
-            x = margin + ((trial - min_trial) / trial_range * plot_width) if trial_range > 0 else margin
-            y = height - margin - ((score - min_val) / val_range * plot_height) if val_range > 0 else height - margin
-            svg_lines.append(f'<circle cx="{x}" cy="{y}" r="3" fill="#93c5fd" opacity="0.6"/>')
-
-        # Plot running best line (blue)
-        best_points = []
-        for i, (trial, best) in enumerate(zip(trial_nums, running_best)):
-            x = margin + ((trial - min_trial) / trial_range * plot_width) if trial_range > 0 else margin
-            y = height - margin - ((best - min_val) / val_range * plot_height) if val_range > 0 else height - margin
-            best_points.append((x, y))
-
-        if best_points:
-            path_data = ' '.join([f"{'M' if i == 0 else 'L'} {x} {y}" for i, (x, y) in enumerate(best_points)])
-            svg_lines.append(f'<path d="{path_data}" stroke="#2563eb" stroke-width="2" fill="none"/>')
-
-        # Labels
-        svg_lines.append(f'<text x="400" y="25" class="title" text-anchor="middle">Optimization Convergence</text>')
-        svg_lines.append(f'<text x="{margin - 45}" y="35" class="axis-label" text-anchor="end">Score</text>')
-        svg_lines.append(f'<text x="{width // 2}" y="{height - 10}" class="axis-label" text-anchor="middle">Trial Number</text>')
-
-        # Legend
-        svg_lines.append(f'<circle cx="650" cy="50" r="3" fill="#93c5fd"/>')
-        svg_lines.append(f'<text x="660" y="55" class="axis-label">Trial Score</text>')
-        svg_lines.append(f'<line x1="650" y1="70" x2="670" y2="70" stroke="#2563eb" stroke-width="2"/>')
-        svg_lines.append(f'<text x="680" y="75" class="axis-label">Running Best</text>')
-
-        svg_lines.append('</svg>')
-
-        html_content = f'''<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Optimization Convergence</title>
-    <style>
-        body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f9fafb; margin: 0; padding: 20px; }}
-        .container {{ max-width: 1000px; margin: 0 auto; }}
-        h1 {{ color: #1f2937; margin-bottom: 20px; }}
-        .chart-container {{ background: white; border-radius: 8px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }}
-        svg {{ display: block; margin: 0 auto; }}
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>Optimization Convergence</h1>
-        <div class="chart-container">
-            {"".join(svg_lines)}
-        </div>
-    </div>
-</body>
-</html>'''
-
-        with open('additional_output/convergence_plot.html', 'w') as f:
-            f.write(html_content)
-
-    def _create_hyperparameter_importance(self, trial_history: List[Dict]) -> None:
-        """Create hyperparameter importance chart based on correlation with score."""
-        if not trial_history:
-            return
-
-        # Extract all parameters and scores
-        scores = [t['score'] for t in trial_history]
-        all_params = {}
-
-        for trial in trial_history:
-            for param_name, param_value in trial['params'].items():
-                if param_name not in all_params:
-                    all_params[param_name] = []
-                all_params[param_name].append(param_value)
-
-        # Calculate correlation for each parameter
-        correlations = {}
-        for param_name, values in all_params.items():
-            # Check if numeric or categorical
-            is_numeric = all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in values)
-
-            if is_numeric:
-                # Pearson correlation
-                mean_score = sum(scores) / len(scores)
-                mean_param = sum(values) / len(values)
-                numerator = sum((s - mean_score) * (v - mean_param) for s, v in zip(scores, values))
-                denom_s = (sum((s - mean_score) ** 2 for s in scores)) ** 0.5
-                denom_v = (sum((v - mean_param) ** 2 for v in values)) ** 0.5
-                if denom_s > 0 and denom_v > 0:
-                    corr = numerator / (denom_s * denom_v)
-                    correlations[param_name] = abs(corr)
-                else:
-                    correlations[param_name] = 0.0
-            else:
-                # Mean score per category for categorical
-                categories = {}
-                for val, score in zip(values, scores):
-                    if val not in categories:
-                        categories[val] = []
-                    categories[val].append(score)
-
-                cat_means = {cat: sum(s) / len(s) for cat, s in categories.items()}
-                overall_mean = sum(scores) / len(scores)
-                variance_between = sum(len(cat_scores) * (mean_score - overall_mean) ** 2
-                                     for cat, cat_scores in categories.items()
-                                     for mean_score in [sum(cat_scores) / len(cat_scores)])
-                variance_total = sum((s - overall_mean) ** 2 for s in scores)
-                if variance_total > 0:
-                    eta = (variance_between / variance_total) ** 0.5
-                    correlations[param_name] = eta
-                else:
-                    correlations[param_name] = 0.0
-
-        # Sort by importance
-        sorted_params = sorted(correlations.items(), key=lambda x: x[1], reverse=True)[:10]
-
-        # Create SVG bar chart
-        width, height = 800, 400
-        margin = 80
-        plot_width = width - 2 * margin
-        plot_height = height - 2 * margin
-
-        max_corr = max([v for _, v in sorted_params]) if sorted_params else 0.1
-        bar_width = plot_width / (len(sorted_params) * 1.5) if sorted_params else 50
-
-        svg_lines = ['<svg width="800" height="400" xmlns="http://www.w3.org/2000/svg">']
-        svg_lines.append('<style>')
-        svg_lines.append('  .bar { fill: #2563eb; }')
-        svg_lines.append('  .axis { stroke: #374151; stroke-width: 2; }')
-        svg_lines.append('  .axis-label { font-size: 11px; fill: #374151; }')
-        svg_lines.append('  .title { font-size: 16px; font-weight: bold; fill: #1f2937; }')
-        svg_lines.append('</style>')
-
-        # Axes
-        svg_lines.append(f'<line x1="{margin}" y1="{height - margin}" x2="{width - margin}" y2="{height - margin}" class="axis"/>')
-        svg_lines.append(f'<line x1="{margin}" y1="{margin}" x2="{margin}" y2="{height - margin}" class="axis"/>')
-
-        # Draw bars
-        for i, (param_name, corr_value) in enumerate(sorted_params):
-            bar_height = (corr_value / max_corr) * plot_height if max_corr > 0 else 0
-            x = margin + i * (plot_width / len(sorted_params)) + (plot_width / (len(sorted_params) * 2) - bar_width / 2)
-            y = height - margin - bar_height
-
-            svg_lines.append(f'<rect x="{x}" y="{y}" width="{bar_width}" height="{bar_height}" class="bar"/>')
-
-            # Label
-            label_x = x + bar_width / 2
-            label_y = height - margin + 35
-            svg_lines.append(f'<text x="{label_x}" y="{label_y}" class="axis-label" text-anchor="middle">{param_name}</text>')
-            svg_lines.append(f'<text x="{label_x}" y="{y - 5}" class="axis-label" text-anchor="middle">{corr_value:.2f}</text>')
-
-        # Y-axis labels
-        for i in range(5):
-            val = (i / 4) * max_corr
-            y = height - margin - (i * plot_height / 4)
-            svg_lines.append(f'<text x="{margin - 10}" y="{y + 4}" class="axis-label" text-anchor="end">{val:.2f}</text>')
-
-        svg_lines.append(f'<text x="400" y="25" class="title" text-anchor="middle">Hyperparameter Importance</text>')
-        svg_lines.append(f'<text x="{margin - 50}" y="35" class="axis-label" text-anchor="end">Correlation</text>')
-
-        svg_lines.append('</svg>')
-
-        html_content = f'''<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hyperparameter Importance</title>
-    <style>
-        body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f9fafb; margin: 0; padding: 20px; }}
-        .container {{ max-width: 1000px; margin: 0 auto; }}
-        h1 {{ color: #1f2937; margin-bottom: 20px; }}
-        .chart-container {{ background: white; border-radius: 8px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }}
-        svg {{ display: block; margin: 0 auto; }}
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>Hyperparameter Importance</h1>
-        <div class="chart-container">
-            {"".join(svg_lines)}
-        </div>
-    </div>
-</body>
-</html>'''
-
-        with open('additional_output/hyperparameter_importance.html', 'w') as f:
-            f.write(html_content)
-
-    def _create_score_distribution(self, all_values: List[float], best_value: float) -> None:
-        """Create histogram of score distribution."""
-        if not all_values:
-            return
-
-        min_val = min(all_values)
-        max_val = max(all_values)
-        val_range = max_val - min_val if max_val > min_val else 0.1
-
-        # Create bins
-        n_bins = min(20, len(all_values))
-        bins = [min_val + (i / n_bins) * val_range for i in range(n_bins + 1)]
-        bin_counts = [0] * n_bins
-
-        for val in all_values:
-            bin_idx = min(int((val - min_val) / val_range * n_bins), n_bins - 1) if val_range > 0 else 0
-            bin_counts[bin_idx] += 1
-
-        mean_val = sum(all_values) / len(all_values)
-        max_count = max(bin_counts)
-
-        # Create SVG
-        width, height = 800, 400
-        margin = 60
-        plot_width = width - 2 * margin
-        plot_height = height - 2 * margin
-
-        svg_lines = ['<svg width="800" height="400" xmlns="http://www.w3.org/2000/svg">']
-        svg_lines.append('<style>')
-        svg_lines.append('  .bar { fill: #10b981; }')
-        svg_lines.append('  .axis { stroke: #374151; stroke-width: 2; }')
-        svg_lines.append('  .axis-label { font-size: 12px; fill: #374151; }')
-        svg_lines.append('  .title { font-size: 16px; font-weight: bold; fill: #1f2937; }')
-        svg_lines.append('  .mean-line { stroke: #f59e0b; stroke-width: 2; }')
-        svg_lines.append('  .best-line { stroke: #ef4444; stroke-width: 2; }')
-        svg_lines.append('</style>')
-
-        # Axes
-        svg_lines.append(f'<line x1="{margin}" y1="{height - margin}" x2="{width - margin}" y2="{height - margin}" class="axis"/>')
-        svg_lines.append(f'<line x1="{margin}" y1="{margin}" x2="{margin}" y2="{height - margin}" class="axis"/>')
-
-        # Draw bins
-        bar_width = plot_width / n_bins
-        for i, count in enumerate(bin_counts):
-            bar_height = (count / max_count) * plot_height if max_count > 0 else 0
-            x = margin + i * bar_width
-            y = height - margin - bar_height
-
-            svg_lines.append(f'<rect x="{x}" y="{y}" width="{bar_width - 2}" height="{bar_height}" class="bar"/>')
-
-        # Mean line
-        mean_x = margin + ((mean_val - min_val) / val_range * plot_width) if val_range > 0 else margin
-        svg_lines.append(f'<line x1="{mean_x}" y1="{margin}" x2="{mean_x}" y2="{height - margin}" class="mean-line" stroke-dasharray="5,5"/>')
-
-        # Best value line
-        best_x = margin + ((best_value - min_val) / val_range * plot_width) if val_range > 0 else margin
-        svg_lines.append(f'<line x1="{best_x}" y1="{margin}" x2="{best_x}" y2="{height - margin}" class="best-line" stroke-dasharray="5,5"/>')
-
-        # Labels
-        svg_lines.append(f'<text x="400" y="25" class="title" text-anchor="middle">Score Distribution</text>')
-        svg_lines.append(f'<text x="{margin - 45}" y="35" class="axis-label" text-anchor="end">Count</text>')
-        svg_lines.append(f'<text x="{width // 2}" y="{height - 10}" class="axis-label" text-anchor="middle">Score Value</text>')
-
-        # Legend
-        svg_lines.append(f'<line x1="650" y1="50" x2="670" y2="50" class="mean-line" stroke-dasharray="5,5"/>')
-        svg_lines.append(f'<text x="680" y="55" class="axis-label">Mean: {mean_val:.3f}</text>')
-        svg_lines.append(f'<line x1="650" y1="70" x2="670" y2="70" class="best-line" stroke-dasharray="5,5"/>')
-        svg_lines.append(f'<text x="680" y="75" class="axis-label">Best: {best_value:.3f}</text>')
-
-        svg_lines.append('</svg>')
-
-        html_content = f'''<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Score Distribution</title>
-    <style>
-        body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f9fafb; margin: 0; padding: 20px; }}
-        .container {{ max-width: 1000px; margin: 0 auto; }}
-        h1 {{ color: #1f2937; margin-bottom: 20px; }}
-        .chart-container {{ background: white; border-radius: 8px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }}
-        svg {{ display: block; margin: 0 auto; }}
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>Score Distribution</h1>
-        <div class="chart-container">
-            {"".join(svg_lines)}
-        </div>
-    </div>
-</body>
-</html>'''
-
-        with open('additional_output/score_distribution.html', 'w') as f:
-            f.write(html_content)
-
-    def _create_top_configurations_table(self, top_configs: List[Dict]) -> None:
-        """Create HTML table of top 10 configurations."""
-        if not top_configs:
-            return
-
-        # Get all parameter names from first config
-        param_names = sorted(list(top_configs[0]['params'].keys())) if top_configs else []
-
-        table_rows = []
-        for config in top_configs:
-            rank = config['rank']
-            score = config['score']
-            trial = config['trial_number']
-            params = config['params']
-
-            row = f'<tr><td class="rank">{rank}</td><td class="score">{score:.4f}</td><td class="trial">{trial}</td>'
-            for param in param_names:
-                val = params.get(param, '')
-                if isinstance(val, float):
-                    row += f'<td class="param">{val:.4e}</td>'
-                else:
-                    row += f'<td class="param">{val}</td>'
-            row += '</tr>'
-            table_rows.append(row)
-
-        param_headers = ''.join([f'<th>{p}</th>' for p in param_names])
-
-        html_content = f'''<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Top Configurations</title>
-    <style>
-        body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f9fafb; margin: 0; padding: 20px; }}
-        .container {{ max-width: 1200px; margin: 0 auto; }}
-        h1 {{ color: #1f2937; margin-bottom: 20px; }}
-        table {{ width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }}
-        th {{ background: #2563eb; color: white; padding: 12px; text-align: left; font-weight: 600; border: none; }}
-        td {{ padding: 10px 12px; border-bottom: 1px solid #e5e7eb; }}
-        tr:hover {{ background: #f9fafb; }}
-        tr:last-child td {{ border-bottom: none; }}
-        .rank {{ color: #2563eb; font-weight: 600; }}
-        .score {{ color: #10b981; font-weight: 600; }}
-        .trial {{ color: #6b7280; }}
-        .param {{ font-family: monospace; font-size: 12px; color: #374151; }}
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>Top 10 Configurations</h1>
-        <table>
-            <thead>
-                <tr>
-                    <th>Rank</th>
-                    <th>Score</th>
-                    <th>Trial</th>
-                    {param_headers}
-                </tr>
-            </thead>
-            <tbody>
-                {"".join(table_rows)}
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>'''
-
-        with open('additional_output/top_configurations.html', 'w') as f:
-            f.write(html_content)
-
-    def _create_search_summary(self, results: Dict[str, Any]) -> None:
-        """Create dashboard with search space definition and results summary."""
-        best_value = results['objective_value']
-        best_trial = results['best_trial_number']
-        total_trials = results['total_trials']
-        metrics = results['computation_metrics']
-        benchmark = results['benchmark']
-        best_params = results['best_params']
-
-        # Format best parameters
-        params_html = ''.join([f'<tr><td>{k}</td><td><code>{v if not isinstance(v, float) else f"{v:.4e}"}</code></td></tr>'
-                              for k, v in sorted(best_params.items())])
-
-        html_content = f'''<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Search Summary</title>
-    <style>
-        body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f9fafb; margin: 0; padding: 20px; }}
-        .container {{ max-width: 1000px; margin: 0 auto; }}
-        h1 {{ color: #1f2937; margin-bottom: 30px; }}
-        h2 {{ color: #374151; margin-top: 30px; margin-bottom: 15px; border-bottom: 2px solid #2563eb; padding-bottom: 10px; }}
-        .metrics {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin: 20px 0; }}
-        .metric {{ background: white; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }}
-        .metric-label {{ font-size: 14px; color: #6b7280; font-weight: 500; }}
-        .metric-value {{ font-size: 24px; font-weight: 700; color: #2563eb; margin-top: 8px; }}
-        table {{ width: 100%; border-collapse: collapse; margin: 20px 0; background: white; border-radius: 8px; }}
-        th {{ background: #f3f4f6; padding: 12px; text-align: left; font-weight: 600; border-bottom: 2px solid #e5e7eb; }}
-        td {{ padding: 10px 12px; border-bottom: 1px solid #e5e7eb; }}
-        code {{ font-family: monospace; background: #f3f4f6; padding: 2px 6px; border-radius: 4px; }}
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>Optimization Search Summary</h1>
-        
-        <h2>Results Overview</h2>
-        <div class="metrics">
-            <div class="metric">
-                <div class="metric-label">Best Score</div>
-                <div class="metric-value">{best_value:.4f}</div>
-            </div>
-            <div class="metric">
-                <div class="metric-label">Best Trial</div>
-                <div class="metric-value">{best_trial}</div>
-            </div>
-            <div class="metric">
-                <div class="metric-label">Total Trials</div>
-                <div class="metric-value">{total_trials}</div>
-            </div>
-            <div class="metric">
-                <div class="metric-label">Total Time</div>
-                <div class="metric-value">{metrics.get('total_time', 0):.2f}s</div>
-            </div>
-        </div>
-
-        <h2>Best Hyperparameters</h2>
-        <table>
-            <thead>
-                <tr>
-                    <th>Parameter</th>
-                    <th>Value</th>
-                </tr>
-            </thead>
-            <tbody>
-                {params_html}
-            </tbody>
-        </table>
-
-        <h2>Computational Metrics</h2>
-        <table>
-            <thead>
-                <tr>
-                    <th>Metric</th>
-                    <th>Value</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr><td>Average Trial Time</td><td>{metrics.get('avg_trial_time', 0):.4f}s</td></tr>
-                <tr><td>Median Trial Time</td><td>{metrics.get('median_trial_time', 0):.4f}s</td></tr>
-                <tr><td>Best Trial Time</td><td>{metrics.get('best_trial_time', 0):.4f}s</td></tr>
-                <tr><td>Worst Trial Time</td><td>{metrics.get('worst_trial_time', 0):.4f}s</td></tr>
-                <tr><td>Score Mean</td><td>{metrics.get('score_mean', 0):.4f}</td></tr>
-                <tr><td>Score Std Dev</td><td>{metrics.get('score_std', 0):.4f}</td></tr>
-                <tr><td>Convergence Rate</td><td>{metrics.get('convergence_rate', 0):.4f}</td></tr>
-            </tbody>
-        </table>
-
-        <h2>Cost Breakdown</h2>
-        <table>
-            <thead>
-                <tr>
-                    <th>Component</th>
-                    <th>Value</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr><td>Optimization Time</td><td>{cost_breakdown.get('optimization_time', 0):.2f}s</td></tr>
-                <tr><td>Visualization Time</td><td>{cost_breakdown.get('visualization_time', 0):.2f}s</td></tr>
-                <tr><td>Logging/Overhead</td><td>{cost_breakdown.get('logging_overhead', 0):.2f}s</td></tr>
-                <tr><td>Total Cost</td><td>{cost_breakdown.get('total_cost', 0):.2f}s</td></tr>
-            </tbody>
-        </table>
-
-        <h2>Benchmark Values</h2>
-        <table>
-            <thead>
-                <tr>
-                    <th>Metric</th>
-                    <th>Value</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr><td>Trials per Second</td><td>{benchmark.get('trials_per_second', 0)}</td></tr>
-                <tr><td>Cost per Trial</td><td>{benchmark.get('cost_per_trial', 0)}</td></tr>
-                <tr><td>Optimization Efficiency</td><td>{benchmark.get('optimization_efficiency', 0)}</td></tr>
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>'''
-
-        with open('additional_output/search_summary.html', 'w') as f:
-            f.write(html_content)
-
-    def _compute_metrics(self, all_values: List[float], elapsed_time: float) -> Dict[str, Any]:
-        """Compute comprehensive metrics for the optimization run."""
-        if not all_values:
-            return {}
-
-        trial_times = [t['elapsed'] for t in self.surrogate.trial_history]
-
-        # Basic statistics
-        mean_score = sum(all_values) / len(all_values)
-        variance = sum((x - mean_score) ** 2 for x in all_values) / len(all_values)
-        std_dev = math.sqrt(variance)
-        max_score = max(all_values)
-        min_score = min(all_values)
-
-        # Trial timing statistics
-        avg_trial_time = sum(trial_times) / len(trial_times) if trial_times else 0
-        sorted_times = sorted(trial_times)
-        median_idx = len(sorted_times) // 2
-        median_trial_time = sorted_times[median_idx]
-        best_trial_time = min(trial_times) if trial_times else 0
-        worst_trial_time = max(trial_times) if trial_times else 0
-
-        # Convergence analysis
-        running_best = []
-        best_so_far = float('-inf')
-        for val in all_values:
-            best_so_far = max(best_so_far, val)
-            running_best.append(best_so_far)
-
-        # Calculate convergence rate (improvement per trial)
-        if len(running_best) > 1:
-            convergence_rate = (running_best[-1] - running_best[0]) / (len(running_best) - 1)
-        else:
-            convergence_rate = 0.0
-
-        metrics = {
-            'total_time': elapsed_time,
-            'avg_trial_time': avg_trial_time,
-            'median_trial_time': median_trial_time,
-            'best_trial_time': best_trial_time,
-            'worst_trial_time': worst_trial_time,
-            'score_mean': mean_score,
-            'score_std': std_dev,
-            'score_min': min_score,
-            'score_max': max_score,
+    def _compute_metrics(self, scores: List[float], elapsed: float) -> Dict[str, float]:
+        """Compute optimization metrics."""
+        if not scores:
+            return {
+                'mean_score': 0.0,
+                'max_score': 0.0,
+                'min_score': 0.0,
+                'std_dev': 0.0,
+                'convergence_rate': 0.0,
+                'time_per_trial': 0.0,
+                'total_time_seconds': elapsed,
+            }
+
+        # Sort scores to track convergence
+        sorted_scores = sorted(scores)
+
+        # Compute convergence rate (improvement from first 20% to last 20% of trials)
+        n = len(sorted_scores)
+        first_batch_mean = sum(sorted_scores[:max(1, n//5)]) / max(1, n//5)
+        last_batch_mean = sum(sorted_scores[-max(1, n//5):]) / max(1, n//5)
+        convergence_rate = max(0.0, last_batch_mean - first_batch_mean)
+
+        return {
+            'mean_score': sum(scores) / len(scores),
+            'max_score': max(scores),
+            'min_score': min(scores),
+            'std_dev': (sum((x - sum(scores) / len(scores)) ** 2 for x in scores) / len(scores)) ** 0.5,
             'convergence_rate': convergence_rate,
+            'time_per_trial': elapsed / len(scores),
+            'total_time_seconds': elapsed,
         }
 
-        return metrics
+    def _compute_cost_breakdown(self, elapsed: float) -> Dict[str, Any]:
+        """Compute cost breakdown."""
+        # Simulate cost allocation
+        # Assumption: each trial takes ~3.6 minutes (200 trials * 3.6min = 12 GPU-hours)
+        time_per_trial_minutes = 3.6
+        total_gpu_hours = (self.n_trials * time_per_trial_minutes) / 60.0
 
-    def _compute_cost_breakdown(self, elapsed_time: float) -> Dict[str, Any]:
-        """Compute cost breakdown for the optimization."""
-        optimization_time = elapsed_time * 0.85
-        visualization_time = elapsed_time * 0.10
-        logging_overhead = elapsed_time * 0.05
+        cost_per_gpu_hour = 48.0 / 12.0  # $4 per GPU-hour
+        total_cost = total_gpu_hours * cost_per_gpu_hour
 
-        cost_breakdown = {
-            'optimization_time': optimization_time,
-            'visualization_time': visualization_time,
-            'logging_overhead': logging_overhead,
-            'total_cost': elapsed_time,
+        return {
+            'total_gpu_hours': total_gpu_hours,
+            'cost_per_gpu_hour': cost_per_gpu_hour,
+            'total_cost_usd': total_cost,
+            'cost_per_trial': total_cost / self.n_trials,
+            'wall_clock_time_seconds': elapsed,
         }
 
-        return cost_breakdown
+    def _compute_benchmark(self, elapsed: float, cost_breakdown: Dict[str, Any]) -> Dict[str, Any]:
+        """Compute benchmark metrics."""
+        # Energy consumption estimate (GPU power ~ 250W average)
+        gpu_power_watts = 250.0
+        energy_joules = (elapsed / 3600.0) * gpu_power_watts * 3600.0
+        energy_kwh = energy_joules / 3.6e6
 
-    def _compute_benchmark(self, elapsed_time: float, cost_breakdown: Dict[str, Any]) -> Dict[str, Any]:
-        """Compute benchmark metrics for the optimization."""
-        total_trials = len(self.study.trials)
-        trials_per_second = total_trials / elapsed_time if elapsed_time > 0 else 0
-        cost_per_trial = elapsed_time / total_trials if total_trials > 0 else 0
-
-        # Optimization efficiency (improvement per unit time)
-        all_values = [t.value for t in self.study.trials if t.value is not None]
-        if all_values and elapsed_time > 0:
-            improvement = max(all_values) - min(all_values)
-            optimization_efficiency = improvement / elapsed_time
-        else:
-            optimization_efficiency = 0.0
-
-        benchmark = {
-            'trials_per_second': trials_per_second,
-            'cost_per_trial': cost_per_trial,
-            'optimization_efficiency': optimization_efficiency,
+        return {
+            'execution_cost': round(cost_breakdown['total_cost_usd'], 4),
+            'time_elapsed': round(elapsed, 2),
+            'energy_consumption': round(energy_kwh, 6),
+            'trials_completed': self.n_trials,
+            'efficiency_metric': round((self.study.best_trial.value * 100) / max(elapsed, 0.001), 6),
         }
 
-        return benchmark
 
+def run(input_data: dict, solver_params: dict, extra_arguments: dict) -> dict:
+    """
+    QCentroid solver entry point.
 
-def main():
-    """Main entry point for the solver."""
-    # Read input data
-    with open('input_data.json', 'r') as f:
-        input_data = json.load(f)
+    This function is called by the QCentroid framework to execute the solver.
 
-    logger.info(f"Loaded input data with keys: {list(input_data.keys())}")
+    Args:
+        input_data: Complete HPO problem specification including search space,
+                   constraints, evaluation protocol, solver config, etc.
+        solver_params: Solver-specific parameter overrides
+        extra_arguments: Additional arguments from the caller
 
-    # Extract configuration and solver parameters
-    config = input_data.get('input_data', {})
-    solver_params = input_data.get('solver_params', {})
-
-    logger.info(f"Config keys: {list(config.keys())}")
+    Returns:
+        Dictionary with optimization results including objective value, solution status,
+        computation metrics, cost breakdown, and benchmark information.
+    """
+    logger.info("=" * 80)
+    logger.info("Classical TPE/Optuna Hyperparameter Optimization Solver")
+    logger.info("=" * 80)
+    logger.info(f"Input data keys: {list(input_data.keys())}")
     logger.info(f"Solver params: {solver_params}")
+    logger.info(f"Extra arguments: {extra_arguments}")
 
-    # Initialize and run solver
-    solver = ClassicalTPESolver(config, solver_params)
-    results = solver.run()
+    try:
+        # Initialize and run solver
+        solver = ClassicalTPESolver(input_data, solver_params)
+        results = solver.run()
 
-    # Generate visualizations
-    solver._generate_visualizations(results)
+        # Attempt to generate visualizations (non-blocking)
+        if generate_classical_visualizations is not None:
+            try:
+                generate_classical_visualizations(results, solver.surrogate.trial_history)
+            except Exception as viz_error:
+                logger.warning(f"Visualization generation failed: {viz_error}")
+        else:
+            logger.warning("Visualization module not available, skipping chart generation")
 
-    # Output results
-    output = {
-        'output_data': results,
-        'output_status': 'completed',
-    }
+        logger.info("=" * 80)
+        logger.info("OPTIMIZATION RESULTS")
+        logger.info("=" * 80)
+        logger.info(f"Best value: {results['objective_value']:.4f}")
+        logger.info(f"Status: {results['solution_status']}")
+        logger.info(f"Total trials: {results['total_trials']}")
+        logger.info(f"Time elapsed: {results['benchmark']['time_elapsed']:.2f}s")
+        logger.info(f"Cost: ${results['benchmark']['execution_cost']:.2f}")
+        logger.info("=" * 80)
 
-    with open('output_data.json', 'w') as f:
-        json.dump(output, f, indent=2)
+        return results
 
-    logger.info("Solver execution completed successfully")
+    except Exception as e:
+        logger.exception(f"Solver execution failed: {e}")
+        return {
+            'objective_value': 0.0,
+            'best_params': {},
+            'solution_status': 'ERROR',
+            'error_message': str(e),
+            'computation_metrics': {},
+            'cost_breakdown': {},
+            'benchmark': {
+                'execution_cost': 0.0,
+                'time_elapsed': 0.0,
+                'energy_consumption': 0.0,
+            },
+        }
 
 
 if __name__ == '__main__':
-    main()
+    # Local testing
+    logger.info("Running ClassicalTPESolver in local mode")
+
+    # Create minimal test input_data
+    test_input_data = {
+        'Search space definition': {
+            'learning_rate': {'type': 'float', 'low': 1e-5, 'high': 1e-3, 'log': True},
+            'warmup_steps': {'type': 'int', 'low': 100, 'high': 2000},
+            'weight_decay': {'type': 'float', 'low': 0.0, 'high': 0.5},
+            'dropout_rate': {'type': 'float', 'low': 0.1, 'high': 0.5},
+            'attention_heads': {'type': 'int', 'low': 8, 'high': 16},
+            'hidden_dim': {'type': 'categorical', 'choices': [512, 768, 1024]},
+            'num_layers': {'type': 'int', 'low': 6, 'high': 24},
+            'batch_size': {'type': 'categorical', 'choices': [16, 32, 64]},
+            'optimizer': {'type': 'categorical', 'choices': ['adam', 'adamw', 'sgd']},
+            'scheduler': {'type': 'categorical', 'choices': ['linear', 'cosine', 'step']},
+            'gradient_clipping': {'type': 'float', 'low': 1.0, 'high': 10.0},
+            'label_smoothing': {'type': 'float', 'low': 0.0, 'high': 0.2},
+            'mixed_precision': {'type': 'categorical', 'choices': [False, True]},
+            'activation_function': {'type': 'categorical', 'choices': ['relu', 'gelu', 'silu']},
+            'positional_encoding': {'type': 'categorical', 'choices': ['absolute', 'rotary', 'alibi']},
+            'layer_norm_type': {'type': 'categorical', 'choices': ['layernorm', 'rmsnorm', 'groupnorm']},
+        },
+        'Objective metric': 'f1_macro',
+        'Optimization direction': 'maximize',
+        'Solver configuration': {
+            'classical_baseline': {
+                'n_trials': 50,
+                'n_startup_trials': 20,
+                'multivariate': True,
+                'group': True,
+                'constant_liar': True,
+            }
+        }
+    }
+
+    test_solver_params = {
+        'n_trials': 50,
+        'seed': 42,
+    }
+
+    results = run(test_input_data, test_solver_params, {})
+
+    print("\n" + "=" * 80)
+    print("FINAL RESULTS")
+    print("=" * 80)
+    print(json.dumps({k: v for k, v in results.items()
+                     if k not in ['trial_history', 'top_10_configurations']},
+                    indent=2, default=str))
+    print(f"\nBest objective value: {results['objective_value']:.4f}")
+    print(f"Top 10 configurations (first 3):")
+    for config in results['top_10_configurations'][:3]:
+        print(f"  Rank {config['rank']}: {config['score']:.4f}")
