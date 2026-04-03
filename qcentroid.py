@@ -412,10 +412,7 @@ class ClassicalTPESolver:
         # Compute benchmark
         benchmark = self._compute_benchmark(elapsed_time, cost_breakdown)
 
-        # Generate visualizations before returning
-        self._generate_visualizations(results)
-
-        return {
+        results = {
             'objective_value': best_value,
             'best_params': best_params,
             'best_trial_number': best_trial.number,
@@ -427,6 +424,11 @@ class ClassicalTPESolver:
             'total_trials': len(self.study.trials),
             'trial_history': self.surrogate.trial_history,
         }
+
+        # Generate visualizations after building results
+        self._generate_visualizations(results)
+
+        return results
 
     def _generate_visualizations(self, results: Dict[str, Any]) -> None:
         """
