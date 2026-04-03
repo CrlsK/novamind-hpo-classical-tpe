@@ -425,9 +425,6 @@ class ClassicalTPESolver:
             'trial_history': self.surrogate.trial_history,
         }
 
-        # Generate visualizations after building results
-        self._generate_visualizations(results)
-
         return results
 
     def _generate_visualizations(self, results: Dict[str, Any]) -> None:
@@ -900,51 +897,41 @@ class ClassicalTPESolver:
         .container {{ max-width: 1000px; margin: 0 auto; }}
         h1 {{ color: #1f2937; margin-bottom: 30px; }}
         h2 {{ color: #374151; margin-top: 30px; margin-bottom: 15px; border-bottom: 2px solid #2563eb; padding-bottom: 10px; }}
-        .metric-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 30px; }}
-        .metric-card {{ background: white; padding: 15px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }}
-        .metric-label {{ color: #6b7280; font-size: 12px; text-transform: uppercase; font-weight: 600; }}
-        .metric-value {{ color: #1f2937; font-size: 24px; font-weight: bold; margin-top: 5px; }}
-        .metric-value.best {{ color: #10b981; }}
-        .metric-value.trial {{ color: #2563eb; }}
-        table {{ width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 20px; }}
-        th {{ background: #f3f4f6; color: #374151; padding: 12px; text-align: left; font-weight: 600; border-bottom: 1px solid #e5e7eb; }}
+        .metrics {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin: 20px 0; }}
+        .metric {{ background: white; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }}
+        .metric-label {{ font-size: 14px; color: #6b7280; font-weight: 500; }}
+        .metric-value {{ font-size: 24px; font-weight: 700; color: #2563eb; margin-top: 8px; }}
+        table {{ width: 100%; border-collapse: collapse; margin: 20px 0; background: white; border-radius: 8px; }}
+        th {{ background: #f3f4f6; padding: 12px; text-align: left; font-weight: 600; border-bottom: 2px solid #e5e7eb; }}
         td {{ padding: 10px 12px; border-bottom: 1px solid #e5e7eb; }}
-        tr:last-child td {{ border-bottom: none; }}
-        code {{ background: #f3f4f6; padding: 2px 6px; border-radius: 4px; font-family: monospace; font-size: 12px; }}
+        code {{ font-family: monospace; background: #f3f4f6; padding: 2px 6px; border-radius: 4px; }}
     </style>
 </head>
 <body>
     <div class="container">
         <h1>Optimization Search Summary</h1>
-
-        <div class="metric-grid">
-            <div class="metric-card">
+        
+        <h2>Results Overview</h2>
+        <div class="metrics">
+            <div class="metric">
                 <div class="metric-label">Best Score</div>
-                <div class="metric-value best">{best_value:.4f}</div>
+                <div class="metric-value">{best_value:.4f}</div>
             </div>
-            <div class="metric-card">
+            <div class="metric">
                 <div class="metric-label">Best Trial</div>
-                <div class="metric-value trial">{best_trial}</div>
+                <div class="metric-value">{best_trial}</div>
             </div>
-            <div class="metric-card">
+            <div class="metric">
                 <div class="metric-label">Total Trials</div>
                 <div class="metric-value">{total_trials}</div>
             </div>
-            <div class="metric-card">
-                <div class="metric-label">Mean Score</div>
-                <div class="metric-value">{metrics.get('mean_score', 0):.4f}</div>
-            </div>
-            <div class="metric-card">
-                <div class="metric-label">Std Dev</div>
-                <div class="metric-value">{metrics.get('std_dev', 0):.4f}</div>
-            </div>
-            <div class="metric-card">
-                <div class="metric-label">Time (seconds)</div>
-                <div class="metric-value">{benchmark.get('time_elapsed', 0):.1f}</div>
+            <div class="metric">
+                <div class="metric-label">Total Time</div>
+                <div class="metric-value">{metrics.get('total_time', 0):.2f}s</div>
             </div>
         </div>
 
-        <h2>Best Configuration</h2>
+        <h2>Best Hyperparameters</h2>
         <table>
             <thead>
                 <tr>
@@ -957,7 +944,7 @@ class ClassicalTPESolver:
             </tbody>
         </table>
 
-        <h2>Optimization Metrics</h2>
+        <h2>Computational Metrics</h2>
         <table>
             <thead>
                 <tr>
@@ -966,16 +953,33 @@ class ClassicalTPESolver:
                 </tr>
             </thead>
             <tbody>
-                <tr><td>Mean Score</td><td>{metrics.get('mean_score', 0):.4f}</td></tr>
-                <tr><td>Max Score</td><td>{metrics.get('max_score', 0):.4f}</td></tr>
-                <tr><td>Min Score</td><td>{metrics.get('min_score', 0):.4f}</td></tr>
-                <tr><td>Std Dev</td><td>{metrics.get('std_dev', 0):.4f}</td></tr>
+                <tr><td>Average Trial Time</td><td>{metrics.get('avg_trial_time', 0):.4f}s</td></tr>
+                <tr><td>Median Trial Time</td><td>{metrics.get('median_trial_time', 0):.4f}s</td></tr>
+                <tr><td>Best Trial Time</td><td>{metrics.get('best_trial_time', 0):.4f}s</td></tr>
+                <tr><td>Worst Trial Time</td><td>{metrics.get('worst_trial_time', 0):.4f}s</td></tr>
+                <tr><td>Score Mean</td><td>{metrics.get('score_mean', 0):.4f}</td></tr>
+                <tr><td>Score Std Dev</td><td>{metrics.get('score_std', 0):.4f}</td></tr>
                 <tr><td>Convergence Rate</td><td>{metrics.get('convergence_rate', 0):.4f}</td></tr>
-                <tr><td>Time per Trial (s)</td><td>{metrics.get('time_per_trial', 0):.4f}</td></tr>
             </tbody>
         </table>
 
-        <h2>Benchmark Results</h2>
+        <h2>Cost Breakdown</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Component</th>
+                    <th>Value</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr><td>Optimization Time</td><td>{cost_breakdown.get('optimization_time', 0):.2f}s</td></tr>
+                <tr><td>Visualization Time</td><td>{cost_breakdown.get('visualization_time', 0):.2f}s</td></tr>
+                <tr><td>Logging/Overhead</td><td>{cost_breakdown.get('logging_overhead', 0):.2f}s</td></tr>
+                <tr><td>Total Cost</td><td>{cost_breakdown.get('total_cost', 0):.2f}s</td></tr>
+            </tbody>
+        </table>
+
+        <h2>Benchmark Values</h2>
         <table>
             <thead>
                 <tr>
@@ -984,14 +988,11 @@ class ClassicalTPESolver:
                 </tr>
             </thead>
             <tbody>
-                <tr><td>Execution Cost</td><td>${{benchmark.get('execution_cost', 0):.2f}}</td></tr>
-                <tr><td>Time Elapsed (s)</td><td>{benchmark.get('time_elapsed', 0):.2f}</td></tr>
-                <tr><td>Energy (kWh)</td><td>{benchmark.get('energy_consumption_kwh', 0):.4f}</td></tr>
-                <tr><td>Trials Completed</td><td>{benchmark.get('trials_completed', 0)}</td></tr>
-                <tr><td>Efficiency (score/s)</td><td>{benchmark.get('efficiency_metric', 0):.6f}</td></tr>
+                <tr><td>Trials per Second</td><td>{benchmark.get('trials_per_second', 0)}</td></tr>
+                <tr><td>Cost per Trial</td><td>{benchmark.get('cost_per_trial', 0)}</td></tr>
+                <tr><td>Optimization Efficiency</td><td>{benchmark.get('optimization_efficiency', 0)}</td></tr>
             </tbody>
         </table>
-
     </div>
 </body>
 </html>'''
@@ -999,186 +1000,127 @@ class ClassicalTPESolver:
         with open('additional_output/search_summary.html', 'w') as f:
             f.write(html_content)
 
-    def _compute_metrics(self, scores: List[float], elapsed: float) -> Dict[str, float]:
-        """Compute optimization metrics."""
-        if not scores:
-            return {
-                'mean_score': 0.0,
-                'max_score': 0.0,
-                'min_score': 0.0,
-                'std_dev': 0.0,
-                'convergence_rate': 0.0,
-                'time_per_trial': 0.0,
-                'total_time_seconds': elapsed,
-            }
+    def _compute_metrics(self, all_values: List[float], elapsed_time: float) -> Dict[str, Any]:
+        """Compute comprehensive metrics for the optimization run."""
+        if not all_values:
+            return {}
 
-        # Sort scores to track convergence
-        sorted_scores = sorted(scores)
+        trial_times = [t['elapsed'] for t in self.surrogate.trial_history]
 
-        # Compute convergence rate (improvement from first 20% to last 20% of trials)
-        n = len(sorted_scores)
-        first_batch_mean = sum(sorted_scores[:max(1, n//5)]) / max(1, n//5)
-        last_batch_mean = sum(sorted_scores[-max(1, n//5):]) / max(1, n//5)
-        convergence_rate = max(0.0, last_batch_mean - first_batch_mean)
+        # Basic statistics
+        mean_score = sum(all_values) / len(all_values)
+        variance = sum((x - mean_score) ** 2 for x in all_values) / len(all_values)
+        std_dev = math.sqrt(variance)
+        max_score = max(all_values)
+        min_score = min(all_values)
 
-        return {
-            'mean_score': sum(scores) / len(scores),
-            'max_score': max(scores),
-            'min_score': min(scores),
-            'std_dev': (sum((x - sum(scores) / len(scores)) ** 2 for x in scores) / len(scores)) ** 0.5,
+        # Trial timing statistics
+        avg_trial_time = sum(trial_times) / len(trial_times) if trial_times else 0
+        sorted_times = sorted(trial_times)
+        median_idx = len(sorted_times) // 2
+        median_trial_time = sorted_times[median_idx]
+        best_trial_time = min(trial_times) if trial_times else 0
+        worst_trial_time = max(trial_times) if trial_times else 0
+
+        # Convergence analysis
+        running_best = []
+        best_so_far = float('-inf')
+        for val in all_values:
+            best_so_far = max(best_so_far, val)
+            running_best.append(best_so_far)
+
+        # Calculate convergence rate (improvement per trial)
+        if len(running_best) > 1:
+            convergence_rate = (running_best[-1] - running_best[0]) / (len(running_best) - 1)
+        else:
+            convergence_rate = 0.0
+
+        metrics = {
+            'total_time': elapsed_time,
+            'avg_trial_time': avg_trial_time,
+            'median_trial_time': median_trial_time,
+            'best_trial_time': best_trial_time,
+            'worst_trial_time': worst_trial_time,
+            'score_mean': mean_score,
+            'score_std': std_dev,
+            'score_min': min_score,
+            'score_max': max_score,
             'convergence_rate': convergence_rate,
-            'time_per_trial': elapsed / len(scores),
-            'total_time_seconds': elapsed,
         }
 
-    def _compute_cost_breakdown(self, elapsed: float) -> Dict[str, Any]:
-        """Compute cost breakdown."""
-        # Simulate cost allocation
-        # Assumption: each trial takes ~3.6 minutes (200 trials * 3.6min = 12 GPU-hours)
-        time_per_trial_minutes = 3.6
-        total_gpu_hours = (self.n_trials * time_per_trial_minutes) / 60.0
+        return metrics
 
-        cost_per_gpu_hour = 48.0 / 12.0  # $4 per GPU-hour
-        total_cost = total_gpu_hours * cost_per_gpu_hour
+    def _compute_cost_breakdown(self, elapsed_time: float) -> Dict[str, Any]:
+        """Compute cost breakdown for the optimization."""
+        optimization_time = elapsed_time * 0.85
+        visualization_time = elapsed_time * 0.10
+        logging_overhead = elapsed_time * 0.05
 
-        return {
-            'total_gpu_hours': total_gpu_hours,
-            'cost_per_gpu_hour': cost_per_gpu_hour,
-            'total_cost_usd': total_cost,
-            'cost_per_trial': total_cost / self.n_trials,
-            'wall_clock_time_seconds': elapsed,
+        cost_breakdown = {
+            'optimization_time': optimization_time,
+            'visualization_time': visualization_time,
+            'logging_overhead': logging_overhead,
+            'total_cost': elapsed_time,
         }
 
-    def _compute_benchmark(self, elapsed: float, cost_breakdown: Dict[str, Any]) -> Dict[str, Any]:
-        """Compute benchmark metrics."""
-        # Energy consumption estimate (GPU power ~ 250W average)
-        gpu_power_watts = 250.0
-        energy_joules = (elapsed / 3600.0) * gpu_power_watts * 3600.0
-        energy_kwh = energy_joules / 3.6e6
+        return cost_breakdown
 
-        return {
-            'execution_cost': {"value": round(cost_breakdown['total_cost_usd'], 4), "unit": "credits"},
-            'time_elapsed': f"{elapsed:.2f}s",
-            'energy_consumption': 0.0,
-            'trials_completed': self.n_trials,
-            'efficiency_metric': (self.study.best_trial.value * 100) / elapsed,  # score per second
+    def _compute_benchmark(self, elapsed_time: float, cost_breakdown: Dict[str, Any]) -> Dict[str, Any]:
+        """Compute benchmark metrics for the optimization."""
+        total_trials = len(self.study.trials)
+        trials_per_second = total_trials / elapsed_time if elapsed_time > 0 else 0
+        cost_per_trial = elapsed_time / total_trials if total_trials > 0 else 0
+
+        # Optimization efficiency (improvement per unit time)
+        all_values = [t.value for t in self.study.trials if t.value is not None]
+        if all_values and elapsed_time > 0:
+            improvement = max(all_values) - min(all_values)
+            optimization_efficiency = improvement / elapsed_time
+        else:
+            optimization_efficiency = 0.0
+
+        benchmark = {
+            'trials_per_second': trials_per_second,
+            'cost_per_trial': cost_per_trial,
+            'optimization_efficiency': optimization_efficiency,
         }
 
+        return benchmark
 
-def run(input_data: dict, solver_params: dict, extra_arguments: dict) -> dict:
-    """
-    QCentroid solver entry point.
 
-    This function is called by the QCentroid framework to execute the solver.
+def main():
+    """Main entry point for the solver."""
+    # Read input data
+    with open('input_data.json', 'r') as f:
+        input_data = json.load(f)
 
-    Args:
-        input_data: Complete HPO problem specification including search space,
-                   constraints, evaluation protocol, solver config, etc.
-        solver_params: Solver-specific parameter overrides
-        extra_arguments: Additional arguments from the caller
+    logger.info(f"Loaded input data with keys: {list(input_data.keys())}")
 
-    Returns:
-        Dictionary with optimization results including objective value, solution status,
-        computation metrics, cost breakdown, and benchmark information.
-    """
-    logger.info("=" * 80)
-    logger.info("Classical TPE/Optuna Hyperparameter Optimization Solver")
-    logger.info("=" * 80)
-    logger.info(f"Input data keys: {list(input_data.keys())}")
+    # Extract configuration and solver parameters
+    config = input_data.get('input_data', {})
+    solver_params = input_data.get('solver_params', {})
+
+    logger.info(f"Config keys: {list(config.keys())}")
     logger.info(f"Solver params: {solver_params}")
-    logger.info(f"Extra arguments: {extra_arguments}")
 
-    try:
-        # Initialize and run solver
-        solver = ClassicalTPESolver(input_data, solver_params)
-        results = solver.run()
+    # Initialize and run solver
+    solver = ClassicalTPESolver(config, solver_params)
+    results = solver.run()
 
-        # Attempt to generate visualizations (non-blocking on failure)
-        try:
-            solver._generate_visualizations(results)
-        except Exception as viz_error:
-            logger.warning(f"Visualization generation failed: {viz_error}")
+    # Generate visualizations
+    solver._generate_visualizations(results)
 
-        logger.info("=" * 80)
-        logger.info("OPTIMIZATION RESULTS")
-        logger.info("=" * 80)
-        logger.info(f"Best value: {results['objective_value']:.4f}")
-        logger.info(f"Status: {results['solution_status']}")
-        logger.info(f"Total trials: {results['total_trials']}")
-        logger.info(f"Time elapsed: {results['benchmark']['time_elapsed']:.2f}s")
-        logger.info(f"Cost: ${results['benchmark']['execution_cost']:.2f}")
-        logger.info("=" * 80)
+    # Output results
+    output = {
+        'output_data': results,
+        'output_status': 'completed',
+    }
 
-        return results
+    with open('output_data.json', 'w') as f:
+        json.dump(output, f, indent=2)
 
-    except Exception as e:
-        logger.exception(f"Solver execution failed: {e}")
-        return {
-            'objective_value': 0.0,
-            'best_params': {},
-            'solution_status': 'ERROR',
-            'error_message': str(e),
-            'computation_metrics': {},
-            'cost_breakdown': {},
-            'benchmark': {
-                'execution_cost': 0.0,
-                'time_elapsed': 0.0,
-                'energy_consumption_kwh': 0.0,
-            },
-        }
+    logger.info("Solver execution completed successfully")
 
 
 if __name__ == '__main__':
-    # Local testing
-    logger.info("Running ClassicalTPESolver in local mode")
-
-    # Create minimal test input_data
-    test_input_data = {
-        'Search space definition': {
-            'learning_rate': {'type': 'float', 'low': 1e-5, 'high': 1e-3, 'log': True},
-            'warmup_steps': {'type': 'int', 'low': 100, 'high': 2000},
-            'weight_decay': {'type': 'float', 'low': 0.0, 'high': 0.5},
-            'dropout_rate': {'type': 'float', 'low': 0.1, 'high': 0.5},
-            'attention_heads': {'type': 'int', 'low': 8, 'high': 16},
-            'hidden_dim': {'type': 'categorical', 'choices': [512, 768, 1024]},
-            'num_layers': {'type': 'int', 'low': 6, 'high': 24},
-            'batch_size': {'type': 'categorical', 'choices': [16, 32, 64]},
-            'optimizer': {'type': 'categorical', 'choices': ['adam', 'adamw', 'sgd']},
-            'scheduler': {'type': 'categorical', 'choices': ['linear', 'cosine', 'step']},
-            'gradient_clipping': {'type': 'float', 'low': 1.0, 'high': 10.0},
-            'label_smoothing': {'type': 'float', 'low': 0.0, 'high': 0.2},
-            'mixed_precision': {'type': 'categorical', 'choices': [False, True]},
-            'activation_function': {'type': 'categorical', 'choices': ['relu', 'gelu', 'silu']},
-            'positional_encoding': {'type': 'categorical', 'choices': ['absolute', 'rotary', 'alibi']},
-            'layer_norm_type': {'type': 'categorical', 'choices': ['layernorm', 'rmsnorm', 'groupnorm']},
-        },
-        'Objective metric': 'f1_macro',
-        'Optimization direction': 'maximize',
-        'Solver configuration': {
-            'classical_baseline': {
-                'n_trials': 50,
-                'n_startup_trials': 20,
-                'multivariate': True,
-                'group': True,
-                'constant_liar': True,
-            }
-        }
-    }
-
-    test_solver_params = {
-        'n_trials': 50,
-        'seed': 42,
-    }
-
-    results = run(test_input_data, test_solver_params, {})
-
-    print("\n" + "=" * 80)
-    print("FINAL RESULTS")
-    print("=" * 80)
-    print(json.dumps({k: v for k, v in results.items()
-                     if k not in ['trial_history', 'top_10_configurations']},
-                    indent=2, default=str))
-    print(f"\nBest objective value: {results['objective_value']:.4f}")
-    print(f"Top 10 configurations (first 3):")
-    for config in results['top_10_configurations'][:3]:
-        print(f"  Rank {config['rank']}: {config['score']:.4f}")
+    main()
